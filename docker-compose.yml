@@ -1,11 +1,20 @@
 services:
+  db:
+    image: postgres:16
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=library
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secret
+
   web:
     build: .
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000
+    # COMMAND CHANGED: We now collect static files automatically on startup!
+    command: sh -c "python manage.py collectstatic --noinput && gunicorn core.wsgi:application --bind 0.0.0.0:8000"
     volumes:
-      - .:/app  # Syncs your local folder to the container (Live Reloading!)
-    ports:
-      - "8000:8000"
+      - .:/app
+      - static_volume:/app/staticfiles  # Write CSS here
     depends_on:
       - db
     environment:
@@ -14,14 +23,17 @@ services:
       - DB_USER=postgres
       - DB_PASS=secret
 
-  db:
-    image: postgres:16
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
     volumes:
-      - postgres_data:/var/lib/postgresql/data # Persists DB data even if container dies
-    environment:
-      - POSTGRES_DB=library
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=secret
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf # Load our custom config
+      - ./frontend/index.html:/usr/share/nginx/html/index.html # Load frontend
+      - static_volume:/app/staticfiles # Read CSS from here
+    depends_on:
+      - web
 
 volumes:
   postgres_data:
+  static_volume: # Shared storage for CSS files

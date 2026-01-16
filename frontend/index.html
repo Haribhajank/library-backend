@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Library System Pro</title>
+    <style>
+        :root { --primary: #007bff; --danger: #dc3545; --warning: #ffc107; --bg: #f4f7f6; }
+        body { font-family: sans-serif; background: var(--bg); padding: 2rem; display: flex; gap: 2rem; }
+        .container { background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .left-panel { flex: 1; height: fit-content; }
+        .right-panel { flex: 2; }
+
+        /* Form Styles */
+        input { display: block; width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button { border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
+        button:hover { opacity: 0.9; }
+        
+        .btn-submit { background: var(--primary); width: 100%; }
+        .btn-update { background: var(--warning); color: #333; width: 100%; display: none; } /* Hidden by default */
+        .btn-cancel { background: #6c757d; width: 100%; margin-top: 5px; display: none; } /* Hidden by default */
+
+        /* List Styles */
+        .book-card { border-left: 4px solid var(--primary); background: #fff; padding: 15px; margin-bottom: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .actions { display: flex; gap: 10px; }
+        .btn-edit { background: var(--warning); color: #333; font-size: 0.8em; }
+        .btn-delete { background: var(--danger); font-size: 0.8em; }
+        
+        .feedback { margin-top: 10px; font-weight: bold; font-size: 0.9em; }
+        .success { color: green; } .error { color: red; }
+    </style>
+</head>
+<body>
+
+    <div class="container left-panel">
+        <h2 id="form-title">📘 Add New Book</h2>
+        
+        <input type="hidden" id="book-id">
+        
+        <input type="text" id="title" placeholder="Title">
+        <input type="text" id="author_name" placeholder="Author Name">
+        <input type="text" id="isbn" placeholder="ISBN (13 digits)">
+        
+        <button id="btn-submit" class="btn-submit" onclick="handleFormSubmit()">Submit Book</button>
+        <button id="btn-update" class="btn-update" onclick="handleFormSubmit()">Update Book</button>
+        <button id="btn-cancel" class="btn-cancel" onclick="resetForm()">Cancel Edit</button>
+
+        <div id="form-feedback" class="feedback"></div>
+    </div>
+
+    <div class="container right-panel">
+        <h1>📚 Library Inventory</h1>
+        <div id="book-list">Loading books...</div>
+    </div>
+
+    <script>
+        const API_URL = '/api/books/';
+        let isEditMode = false; // State to track if we are adding or editing
+
+        // --- 1. LOAD BOOKS (GET) ---
+        async function loadBooks() {
+            const list = document.getElementById('book-list');
+            try {
+                const response = await fetch(API_URL);
+                const books = await response.json();
+                list.innerHTML = '';
+
+                books.forEach(book => {
+                    const div = document.createElement('div');
+                    div.className = 'book-card';
+                    div.innerHTML = `
+                        <div>
+                            <strong>${book.title}</strong><br>
+                            <small>By ${book.author_name} | ISBN: ${book.isbn}</small>
+                        </div>
+                        <div class="actions">
+                            <button class="btn-edit" onclick="startEditMode(${book.id}, '${book.title}', '${book.author_name}', '${book.isbn}')">Edit</button>
+                            <button class="btn-delete" onclick="deleteBook(${book.id})">Delete</button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (err) { list.innerHTML = 'Error loading books'; }
+        }
+
+        // --- 2. DELETE BOOK (DELETE) ---
+        async function deleteBook(id) {
+            if(!confirm('Are you sure you want to delete this book?')) return;
+
+            try {
+                const response = await fetch(`${API_URL}${id}/`, { method: 'DELETE' });
+                if(response.ok) {
+                    loadBooks(); // Refresh list
+                    resetForm(); // Just in case we were editing the deleted book
+                } else {
+                    alert('Failed to delete');
+                }
+            } catch (err) { alert('Network Error'); }
+        }
+
+        // --- 3. PREPARE EDIT MODE (UI Logic) ---
+        function startEditMode(id, title, author, isbn) {
+            isEditMode = true;
+            
+            // Fill the form with existing data
+            document.getElementById('book-id').value = id;
+            document.getElementById('title').value = title;
+            document.getElementById('author_name').value = author;
+            document.getElementById('isbn').value = isbn;
+
+            // Change Buttons
+            document.getElementById('form-title').innerText = '✏️ Edit Book';
+            document.getElementById('btn-submit').style.display = 'none';
+            document.getElementById('btn-update').style.display = 'block';
+            document.getElementById('btn-cancel').style.display = 'block';
+        }
+
+        // --- 4. RESET FORM (UI Logic) ---
+        function resetForm() {
+            isEditMode = false;
+            document.getElementById('book-id').value = '';
+            document.getElementById('title').value = '';
+            document.getElementById('author_name').value = '';
+            document.getElementById('isbn').value = '';
+
+            // Reset Buttons
+            document.getElementById('form-title').innerText = '📘 Add New Book';
+            document.getElementById('btn-submit').style.display = 'block';
+            document.getElementById('btn-update').style.display = 'none';
+            document.getElementById('btn-cancel').style.display = 'none';
+            document.getElementById('form-feedback').innerHTML = '';
+        }
+
+        // --- 5. HANDLE SUBMIT (POST or PUT) ---
+        async function handleFormSubmit() {
+            const id = document.getElementById('book-id').value;
+            const data = {
+                title: document.getElementById('title').value,
+                author_name: document.getElementById('author_name').value,
+                isbn: document.getElementById('isbn').value
+            };
+
+            const feedback = document.getElementById('form-feedback');
+            
+            try {
+                let response;
+                if (isEditMode) {
+                    // UPDATE: Send PUT to /api/books/{id}/
+                    response = await fetch(`${API_URL}${id}/`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    // CREATE: Send POST to /api/books/
+                    response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+
+                if (response.ok) {
+                    loadBooks();
+                    resetForm();
+                    feedback.innerHTML = isEditMode ? 'Updated!' : 'Created!';
+                    feedback.className = 'feedback success';
+                } else {
+                    const errorData = await response.json();
+                    feedback.innerHTML = 'Error: ' + JSON.stringify(errorData);
+                    feedback.className = 'feedback error';
+                }
+            } catch (err) {
+                feedback.innerHTML = 'Network Error';
+            }
+        }
+
+        // Start app
+        loadBooks();
+    </script>
+</body>
+</html>
