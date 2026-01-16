@@ -1,0 +1,51 @@
+name: Django CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      # We need a temporary Postgres DB for testing
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_DB: library
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        # Simple health check to wait until DB is ready
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Tests
+      env:
+        # We inject the env vars so Django connects to the service above
+        DB_HOST: localhost
+        DB_USER: postgres
+        DB_PASS: secret
+        DB_NAME: library
+      run: |
+        python manage.py test
